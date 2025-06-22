@@ -117,57 +117,57 @@ for d in *; do
     for p in *; do
         [[ "$p" == "original_module" ]] || [[ "$p" == "source" ]] && continue
 
-        case "$(stat -c %F "$p")" in
-            "symbolic link")
-                p2=${p%\-x86_64}
-                p2=${p2#kernel-}
-                log_info "Found module link for $p2"
-                if ! [[ -d /lib/modules/$p2 ]]; then
-                    log_error "Missing kernel sources /lib/modules/$p2"
-                    if ((EUID == 0)); then
-                        rm -v "$p"
-                    else
-                        log_warning "Not root, skipping: 'rm $p'"
-                    fi
+        # Use locale-independent file type checks instead of locale-dependent "stat -c %F"
+        if [[ -L "$p" ]]; then
+            # Handle symbolic link
+            p2=${p%\-x86_64}
+            p2=${p2#kernel-}
+            log_info "Found module link for $p2"
+            if ! [[ -d /lib/modules/$p2 ]]; then
+                log_error "Missing kernel sources /lib/modules/$p2"
+                if ((EUID == 0)); then
+                    rm -v "$p"
                 else
-                    log_success "Found kernel sources /lib/modules/$p2"
+                    log_warning "Not root, skipping: 'rm $p'"
                 fi
-                ;;
-            "directory")
-                log_info "Found directory $p"
-                if [[ -e "$p/source" ]]; then
-                    log_success "Found module sources"
-                    for kernel_dir in "$p"/*; do
-                        [[ -d "$kernel_dir" ]] || continue
-                        [[ "$kernel_dir" == "$p/source" ]] && continue
-                        # Get just the kernel version from the path
-                        kernel_version=$(basename "$kernel_dir")
-                        log_info "Checking kernel directory: $kernel_version"
-                        if ! [[ -d "/lib/modules/$kernel_version" ]]; then
-                            log_error "Kernel $kernel_version no longer exists"
-                            if ((EUID == 0)); then
-                                rm -rv "$kernel_dir"
-                            else
-                                log_warning "Not root, skipping: 'rm -r $kernel_dir'"
-                            fi
-                        else
-                            log_success "Kernel $kernel_version exists"
-                        fi
-                    done
-                else
-                    if ! [[ -d /lib/modules/$p ]]; then
-                        log_error "Kernel $p no longer exists"
+            else
+                log_success "Found kernel sources /lib/modules/$p2"
+            fi
+        elif [[ -d "$p" ]]; then
+            # Handle directory
+            log_info "Found directory $p"
+            if [[ -e "$p/source" ]]; then
+                log_success "Found module sources"
+                for kernel_dir in "$p"/*; do
+                    [[ -d "$kernel_dir" ]] || continue
+                    [[ "$kernel_dir" == "$p/source" ]] && continue
+                    # Get just the kernel version from the path
+                    kernel_version=$(basename "$kernel_dir")
+                    log_info "Checking kernel directory: $kernel_version"
+                    if ! [[ -d "/lib/modules/$kernel_version" ]]; then
+                        log_error "Kernel $kernel_version no longer exists"
                         if ((EUID == 0)); then
-                            rm -rv "$p"
+                            rm -rv "$kernel_dir"
                         else
-                            log_warning "Not root, skipping: 'rm -r $p'"
+                            log_warning "Not root, skipping: 'rm -r $kernel_dir'"
                         fi
                     else
-                        log_success "Kernel $p exists"
+                        log_success "Kernel $kernel_version exists"
                     fi
+                done
+            else
+                if ! [[ -d /lib/modules/$p ]]; then
+                    log_error "Kernel $p no longer exists"
+                    if ((EUID == 0)); then
+                        rm -rv "$p"
+                    else
+                        log_warning "Not root, skipping: 'rm -r $p'"
+                    fi
+                else
+                    log_success "Kernel $p exists"
                 fi
-                ;;
-        esac
+            fi
+        fi
     done
     cd ..
 done
